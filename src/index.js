@@ -3,6 +3,49 @@
 const fs = require("fs");
 const path = require("path");
 
+
+// ─────────────────────────────────────────────
+// Built-in .env loader (no external dependency)
+// ─────────────────────────────────────────────
+
+function loadEnvFile(envPath) {
+  const resolved = require("path").resolve(envPath);
+  if (!fs.existsSync(resolved)) return; // silently skip if file not found
+
+  const lines = fs.readFileSync(resolved, "utf-8").split(/\r?\n/);
+
+  for (const raw of lines) {
+    const line = raw.trim();
+
+    // Skip blank lines and comments
+    if (!line || line.startsWith("#")) continue;
+
+    // Must contain =
+    if (!line.includes("=")) continue;
+
+    const eqIdx = line.indexOf("=");
+    const key   = line.slice(0, eqIdx).trim();
+    let   value = line.slice(eqIdx + 1).trim();
+
+    // Strip inline comment
+    const ci = value.indexOf(" #");
+    if (ci !== -1) value = value.slice(0, ci).trim();
+
+    // Strip surrounding quotes
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+
+    // Real environment always wins over .env file
+    if (!(key in process.env)) {
+      process.env[key] = value;
+    }
+  }
+}
+
 // ─────────────────────────────────────────────
 // Custom error classes
 // ─────────────────────────────────────────────
@@ -152,11 +195,13 @@ function parseFile(filepath) {
 class KQParser {
   /**
    * Create a new KQParser.
-   * @param {string}      filepath     - Path to your config.kq file
-   * @param {string}      role         - Which block to read: "server" | "client" | any custom name
-   * @param {string|null} [overrideFile] - Optional override file (e.g. config.prod.kq)
+   * @param {string}        filepath       - Path to your config.kq file
+   * @param {string}        role           - Which block to read: "server" | "client" | any custom name
+   * @param {string|null}   [overrideFile] - Optional override file (e.g. config.prod.kq)
+   * @param {object}        [options]      - Extra options
+   * @param {string|false}  [options.envFile] - Path to .env file. Defaults to .env next to config file. Pass false to disable.
    */
-  constructor(filepath, role, overrideFile = null) {
+  constructor(filepath, role, overrideFile = null, options = {}) {
     if (!filepath || typeof filepath !== "string")
       throw new KQError("filepath must be a non-empty string.");
     if (!role || typeof role !== "string")
@@ -167,6 +212,12 @@ class KQParser {
     this._overrideFile = overrideFile || null;
     this._config       = {};
     this._loaded       = false;
+
+    // Built-in .env support
+    // Default: looks for .env in the same folder as the config file
+    const configDir = require("path").dirname(require("path").resolve(filepath));
+    const defaultEnv = require("path").join(configDir, ".env");
+    this._envFile = options.envFile !== undefined ? options.envFile : defaultEnv;
   }
 
   // ── getters ────────────────────────────────
@@ -179,15 +230,19 @@ class KQParser {
 
   /**
    * Load and merge all config layers in priority order:
-   *   1. base file — ::shared block
-   *   2. base file — ::<role> block
-   *   3. override file — ::shared block  (if provided)
-   *   4. override file — ::<role> block  (if provided)
-   *   5. env vars — KQ_<ROLE>_<KEY>=value  (highest priority)
+   *   1. .env file loaded into process.env (if found)
+   *   2. base file — ::shared block
+   *   3. base file — ::<role> block
+   *   4. override file — ::shared block  (if provided)
+   *   5. override file — ::<role> block  (if provided)
+   *   6. env vars — KQ_<ROLE>_<KEY>=value  (highest priority)
    *
    * @returns {this} for chaining
    */
   load() {
+    // Load .env file first so $ENV: variables are available
+    if (this._envFile) loadEnvFile(this._envFile);
+
     const base = parseFile(this._filepath);
     const out  = {};
 
