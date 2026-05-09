@@ -1,0 +1,27 @@
+{
+  "name": "kq-config",
+  "version": "1.0.0",
+  "description": "A professional config parser for .kq files with server/client separation, env variable injection, layered overrides, and schema validation.",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node test/index.test.js"
+  },
+  "keywords": [
+    "config",
+    "kq",
+    "configuration",
+    "env",
+    "parser",
+    "server",
+    "client"
+  ],
+  "author": "Kanishq.R.Purohit",
+  "license": "MIT",
+  "licenseFile": "LICENSE",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
