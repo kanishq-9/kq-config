@@ -1,57 +1,88 @@
 # ─────────────────────────────────────────
-# Source & development files
-# (users only need dist/, not your raw src)
+# Dependencies
 # ─────────────────────────────────────────
-src/
-scripts/
-test/
+node_modules/
+.pnp
+.pnp.js
  
 # ─────────────────────────────────────────
-# GitHub & CI
+# Build output
 # ─────────────────────────────────────────
-.github/
-.travis.yml
-.circleci/
-.husky/
+dist/
+build/
+out/
  
 # ─────────────────────────────────────────
-# Config files
+# Environment & secrets
 # ─────────────────────────────────────────
-*.kq
 .env
-.env.*
+.env.local
+.env.development
+.env.production
+.env.test
+*.pem
+*.key
+*.cert
  
 # ─────────────────────────────────────────
-# Logs & coverage
+# Config files (your format)
+# ─────────────────────────────────────────
+config.prod.kq
+config.staging.kq
+*.secret.kq
+ 
+# ─────────────────────────────────────────
+# Logs
 # ─────────────────────────────────────────
 *.log
 *.log.*
 logs/
-coverage/
-.nyc_output/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
  
 # ─────────────────────────────────────────
-# Test & build artifacts
+# Test & coverage
 # ─────────────────────────────────────────
+coverage/
+.nyc_output/
 .tmp/
-*.tgz
  
 # ─────────────────────────────────────────
 # OS files
 # ─────────────────────────────────────────
+ 
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
 Thumbs.db
+ 
+# Windows
 desktop.ini
+$RECYCLE.BIN/
+ 
+# Linux
+*~
  
 # ─────────────────────────────────────────
-# Editor & IDE
+# Editors & IDEs
 # ─────────────────────────────────────────
+ 
+# VS Code
 .vscode/
+!.vscode/extensions.json
+ 
+# JetBrains (WebStorm, IntelliJ)
 .idea/
+*.iml
+ 
+# Vim / Emacs
 *.swp
 *.swo
+*.orig
+\#*\#
  
 # ─────────────────────────────────────────
-# Git
+# npm
 # ─────────────────────────────────────────
-.git/
