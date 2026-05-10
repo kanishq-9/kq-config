@@ -7,6 +7,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ---
 
+## [1.0.1] — 2026-05-09
+
+### Fixed
+- Built-in .env file loader (no dotenv dependency needed)
+- Added KQOptions type to TypeScript definitions
+- Fixed build script backtick issue
+
+---
+
 ## [1.0.0] — 2026-05-09
 
 ### Added
