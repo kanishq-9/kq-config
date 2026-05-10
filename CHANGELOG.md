@@ -6,7 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [1.0.2] — 2026-05-10
 
+### Fixed
+- Updated README with kq name origin
+- Fixed repository URL in package.json
+
+---
 ## [1.0.1] — 2026-05-09
 
 ### Fixed
