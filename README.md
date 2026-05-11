@@ -578,13 +578,153 @@ console.log(`Port: ${port}`);
 
 ---
 
-## Security
-
-To report a vulnerability privately, see [SECURITY.md](SECURITY.md)
-or email kqconfig.security@gmail.com
-
----
-
 ## License
 
 [MIT](LICENSE) — © 2026 kanishq-9
+
+---
+
+## Security Features
+
+kq-config has professional-grade security built in — no extra packages needed.
+
+---
+
+### 1. Encrypted values (`ENC:` syntax)
+
+Store encrypted secrets directly in your `.kq` file using AES-256-GCM encryption. Even if someone gets your config file, they cannot read the secrets without the master key.
+
+**Step 1 — Generate a master key (run once):**
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# Output: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c7888a8660b1e5c8c51b9ff59f
+```
+
+**Step 2 — Add it to your `.env`:**
+```
+KQ_MASTER_KEY=3a7bd3e2360a3d29eea436fcfb7e44c735d117c7888a8660b1e5c8c51b9ff59f
+```
+
+**Step 3 — Encrypt your secrets:**
+```js
+const { KQParser } = require("kq-config");
+
+// Set KQ_MASTER_KEY in your shell or .env first
+const encrypted = KQParser.encrypt("mysupersecretpassword");
+console.log(encrypted);
+// ENC:aGVsbG8gd29ybGQ=:abc123:xyz456
+```
+
+**Step 4 — Paste the ENC: value into your `config.kq`:**
+```
+::server
+  host       = localhost
+  port       = 3000
+  db_pass    = ENC:aGVsbG8gd29ybGQ=:abc123:xyz456
+  secret_key = ENC:dGhpcyBpcyBhIHNlY3JldA==:def456:uvw789
+::end
+```
+
+**Step 5 — Load as normal — decryption is automatic:**
+```js
+const { KQParser } = require("kq-config");
+
+// KQ_MASTER_KEY loaded from .env automatically
+const server = new KQParser("config.kq", "server").load();
+
+console.log(server.get("db_pass"));    // "mysupersecretpassword" ✅
+console.log(server.get("secret_key")); // "myjwtsecretkey" ✅
+```
+
+**Decrypt a value manually:**
+```js
+const decrypted = KQParser.decrypt("ENC:aGVsbG8gd29ybGQ=:abc123:xyz456");
+console.log(decrypted); // "mysupersecretpassword"
+```
+
+---
+
+### 2. Secret masking
+
+Prevent secrets from appearing in logs or debug output:
+
+```js
+const server = new KQParser("config.kq", "server").load();
+
+// Without masking — shows real values (default)
+console.log(server.all());
+// { port: 3000, db_pass: "mysupersecretpassword", secret_key: "jwt123" }
+
+// With masking — secrets hidden
+console.log(server.all(true));
+// { port: 3000, db_pass: "***MASKED***", secret_key: "***MASKED***" }
+
+// Always mask — set once in constructor
+const server = new KQParser("config.kq", "server", null, { mask: true }).load();
+server.all(); // always returns masked values
+```
+
+Keys that are automatically masked: anything matching `password`, `secret`, `token`, `api_key`, `private_key`, `auth`, `credential`, `jwt`.
+
+---
+
+### 3. Raw secret detection
+
+If you accidentally put a raw secret directly in your `.kq` file, kq-config warns you:
+
+```
+# config.kq — WARNING triggered
+::server
+  db_pass = ghp_abc123XYZ789realtoken   ← looks like a GitHub token
+::end
+```
+
+```
+Warning: kq-config: Key 'db_pass' looks like a secret but has a raw value.
+         Consider using '$ENV:DB_PASS' or 'ENC:' encryption instead.
+```
+
+---
+
+### 4. `$ENV:` vs `ENC:` — when to use which
+
+| | `$ENV:VAR` | `ENC:ciphertext` |
+|---|---|---|
+| Secret lives in | `.env` file or shell | inside `config.kq` |
+| Readable in config | no — just a reference | no — encrypted |
+| Needs master key | no | yes — `KQ_MASTER_KEY` |
+| Best for | local dev, CI/CD | committing config to git safely |
+| Can commit to git | no — keep `.env` out of git | yes — encrypted values are safe |
+
+**Recommendation:**
+```
+Local development    → $ENV:   (secrets in .env, never committed)
+Commit config to git → ENC:    (encrypted in config.kq, safe to commit)
+CI/CD pipelines      → $ENV:   (inject via environment secrets)
+Ultra sensitive      → ENC: + $ENV:KQ_MASTER_KEY  (best of both)
+```
+
+---
+
+### 5. All security protections
+
+| Protection | What it blocks |
+|---|---|
+| Path traversal | `../../etc/passwd` style attacks |
+| Prototype pollution | `__proto__`, `constructor`, `prototype` keys |
+| ReDoS | Values over 10,000 characters |
+| Memory exhaustion | Files over 1MB |
+| Key length | Keys over 256 characters |
+| Null bytes | Null bytes in values |
+| Control characters | Control characters in values |
+| Env hijacking | `.env` cannot overwrite `NODE_OPTIONS`, `PATH` etc. |
+| Circular override | Base and override cannot be the same file |
+| Supply chain | Zero external dependencies |
+| Tampering | npm provenance — every release cryptographically signed |
+
+---
+
+### 6. Reporting a vulnerability
+
+Please do not open a public GitHub issue for security vulnerabilities.
+See [SECURITY.md](SECURITY.md) for how to report privately.
