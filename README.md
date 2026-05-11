@@ -578,6 +578,13 @@ console.log(`Port: ${port}`);
 
 ---
 
+## Security
+
+To report a vulnerability privately, see [SECURITY.md](SECURITY.md)
+or email kqconfig.security@gmail.com
+
+---
+
 ## License
 
 [MIT](LICENSE) — © 2026 kanishq-9

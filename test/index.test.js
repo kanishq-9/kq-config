@@ -390,3 +390,339 @@ console.log("─".repeat(50));
 console.log(`\n  ${passed} passed  |  ${failed} failed  |  ${skipped} skipped\n`);
 
 if (failed > 0) process.exit(1);
+
+
+// ─────────────────────────────────────────────
+// .env file loading tests
+// ─────────────────────────────────────────────
+
+console.log("\n  ── Built-in .env loading ─────────────────────");
+
+test("loads .env file automatically from config directory", () => {
+  const dir    = path.join(__dirname, ".tmp-env");
+  const kqFile = path.join(dir, "config.kq");
+  const envFile = path.join(dir, ".env");
+  fs.mkdirSync(dir, { recursive: true });
+
+  fs.writeFileSync(kqFile, `::server\n  db_pass = $ENV:KQ_DOTENV_TEST\n::end\n`);
+  fs.writeFileSync(envFile, `KQ_DOTENV_TEST=loaded_from_env_file\n`);
+
+  delete process.env.KQ_DOTENV_TEST; // make sure it's not set in shell
+  const s = new KQParser(kqFile, "server").load();
+  assert(s.get("db_pass") === "loaded_from_env_file", ".env file not loaded");
+
+  fs.rmSync(dir, { recursive: true, force: true });
+  delete process.env.KQ_DOTENV_TEST;
+});
+
+test("real process.env always wins over .env file", () => {
+  const dir    = path.join(__dirname, ".tmp-env2");
+  const kqFile = path.join(dir, "config.kq");
+  const envFile = path.join(dir, ".env");
+  fs.mkdirSync(dir, { recursive: true });
+
+  fs.writeFileSync(kqFile, `::server\n  val = $ENV:KQ_WIN_TEST\n::end\n`);
+  fs.writeFileSync(envFile, `KQ_WIN_TEST=from_file\n`);
+
+  process.env.KQ_WIN_TEST = "from_shell"; // shell wins
+  const s = new KQParser(kqFile, "server").load();
+  assert(s.get("val") === "from_shell", "shell env should win over .env file");
+
+  fs.rmSync(dir, { recursive: true, force: true });
+  delete process.env.KQ_WIN_TEST;
+});
+
+test("custom envFile path via options", () => {
+  const dir     = path.join(__dirname, ".tmp-env3");
+  const kqFile  = path.join(dir, "config.kq");
+  const envFile = path.join(dir, ".env.custom");
+  fs.mkdirSync(dir, { recursive: true });
+
+  fs.writeFileSync(kqFile, `::server\n  key = $ENV:KQ_CUSTOM_ENV\n::end\n`);
+  fs.writeFileSync(envFile, `KQ_CUSTOM_ENV=custom_loaded\n`);
+
+  delete process.env.KQ_CUSTOM_ENV;
+  const s = new KQParser(kqFile, "server", null, { envFile }).load();
+  assert(s.get("key") === "custom_loaded", "custom envFile not loaded");
+
+  fs.rmSync(dir, { recursive: true, force: true });
+  delete process.env.KQ_CUSTOM_ENV;
+});
+
+test("envFile: false disables .env loading", () => {
+  const dir    = path.join(__dirname, ".tmp-env4");
+  const kqFile = path.join(dir, "config.kq");
+  const envFile = path.join(dir, ".env");
+  fs.mkdirSync(dir, { recursive: true });
+
+  fs.writeFileSync(kqFile, `::server\n  key = $ENV:KQ_DISABLED_ENV\n::end\n`);
+  fs.writeFileSync(envFile, `KQ_DISABLED_ENV=should_not_load\n`);
+
+  delete process.env.KQ_DISABLED_ENV;
+  assertThrows(
+    () => new KQParser(kqFile, "server", null, { envFile: false }).load(),
+    "KQEnvError"  // should fail because .env not loaded and var not in shell
+  );
+
+  fs.rmSync(dir, { recursive: true, force: true });
+  delete process.env.KQ_DISABLED_ENV;
+});
+
+test("silently skips missing .env file", () => {
+  const dir    = path.join(__dirname, ".tmp-env5");
+  const kqFile = path.join(dir, "config.kq");
+  fs.mkdirSync(dir, { recursive: true });
+
+  fs.writeFileSync(kqFile, `::server\n  port = 3000\n::end\n`);
+  // No .env file — should not throw
+  const s = new KQParser(kqFile, "server").load();
+  assert(s.get("port") === 3000, "should still load config without .env");
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// ─────────────────────────────────────────────
+// Security tests
+// ─────────────────────────────────────────────
+
+// Re-set env vars — .env tests may have cleaned them up
+process.env.KQ_TEST_DB_USER = "admin";
+process.env.KQ_TEST_DB_PASS = "secret123";
+process.env.KQ_TEST_SECRET  = "jwt-super-secret";
+
+// Simple file with no $ENV: for tests that just need a valid parseable file
+const SIMPLE = path.join(__dirname, ".tmp-simple.kq");
+fs.writeFileSync(SIMPLE, `::server\n  port = 3000\n  host = localhost\n::end\n`);
+
+console.log("\n  ── Security ─────────────────────────────────");
+
+test("blocks path traversal attack (../../etc/passwd)", () => {
+  assertThrows(
+    () => new KQParser("../../etc/passwd", "server").load(),
+    "KQError"
+  );
+});
+
+test("blocks path traversal in override file", () => {
+  assertThrows(
+    () => new KQParser(SIMPLE, "server", "../../etc/passwd").load(),
+    "KQError"
+  );
+});
+
+test("blocks __proto__ key (prototype pollution)", () => {
+  const tmp = path.join(__dirname, ".tmp-proto.kq");
+  fs.writeFileSync(tmp, `::server\n  __proto__ = polluted\n::end\n`);
+  assertThrows(() => new KQParser(tmp, "server").load(), "KQError");
+  fs.unlinkSync(tmp);
+});
+
+test("blocks constructor key (prototype pollution)", () => {
+  const tmp = path.join(__dirname, ".tmp-ctor.kq");
+  fs.writeFileSync(tmp, `::server\n  constructor = polluted\n::end\n`);
+  assertThrows(() => new KQParser(tmp, "server").load(), "KQError");
+  fs.unlinkSync(tmp);
+});
+
+test("blocks prototype key (prototype pollution)", () => {
+  const tmp = path.join(__dirname, ".tmp-proto2.kq");
+  fs.writeFileSync(tmp, `::server\n  prototype = polluted\n::end\n`);
+  assertThrows(() => new KQParser(tmp, "server").load(), "KQError");
+  fs.unlinkSync(tmp);
+});
+
+test("blocks value exceeding max length (ReDoS)", () => {
+  const tmp = path.join(__dirname, ".tmp-long.kq");
+  const longVal = "a".repeat(10001);
+  fs.writeFileSync(tmp, `::server\n  big = ${longVal}\n::end\n`);
+  assertThrows(() => new KQParser(tmp, "server").load(), "KQError");
+  fs.unlinkSync(tmp);
+});
+
+test("value at exactly max length is allowed", () => {
+  const tmp = path.join(__dirname, ".tmp-maxlen.kq");
+  const maxVal = "a".repeat(10000);
+  fs.writeFileSync(tmp, `::server\n  big = ${maxVal}\n::end\n`);
+  const s = new KQParser(tmp, "server").load();
+  assert(s.get("big").length === 10000, "max length value should be allowed");
+  fs.unlinkSync(tmp);
+});
+
+test("blocks same file as base and override", () => {
+  assertThrows(
+    () => new KQParser(BASE, "server", BASE).load(),
+    "KQError"
+  );
+});
+
+test("blocks NODE_OPTIONS in .env file", () => {
+  const dir = path.join(__dirname, ".tmp-nodeopt");
+  const kqFile = path.join(dir, "config.kq");
+  const envFile = path.join(dir, ".env");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(kqFile, `::server\n  port = 3000\n::end\n`);
+  fs.writeFileSync(envFile, `NODE_OPTIONS=--require malicious.js\n`);
+  // Should not throw — just warns and skips the protected key
+  const s = new KQParser(kqFile, "server").load();
+  // NODE_OPTIONS should NOT be overwritten
+  assert(
+    process.env.NODE_OPTIONS !== "--require malicious.js",
+    "NODE_OPTIONS should be blocked"
+  );
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("blocks PATH in .env file", () => {
+  const dir = path.join(__dirname, ".tmp-path");
+  const kqFile = path.join(dir, "config.kq");
+  const envFile = path.join(dir, ".env");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(kqFile, `::server\n  port = 3000\n::end\n`);
+  const originalPath = process.env.PATH;
+  fs.writeFileSync(envFile, `PATH=/malicious/bin\n`);
+  new KQParser(kqFile, "server").load();
+  assert(process.env.PATH === originalPath, "PATH should not be overwritten");
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("all() uses null prototype (no pollution possible)", () => {
+  const s = new KQParser(SIMPLE, "server").load();
+  const all = s.all();
+  assert(Object.getPrototypeOf(all) === null, "all() should return null-prototype object");
+  fs.unlinkSync(SIMPLE);
+});
+
+// ─────────────────────────────────────────────
+// Final results
+// ─────────────────────────────────────────────
+
+console.log("\n" + "─".repeat(50));
+results.forEach(r => {
+  if (r.status === "pass") {
+    console.log(`  ✅  ${r.name}`);
+  } else {
+    console.log(`  ❌  ${r.name}`);
+    console.log(`       → ${r.error}`);
+  }
+});
+
+console.log("─".repeat(50));
+console.log(`\n  ${passed} passed  |  ${failed} failed  |  ${skipped} skipped\n`);
+
+if (failed > 0) process.exit(1);
+
+// ─────────────────────────────────────────────
+// Encryption / Decryption tests
+// ─────────────────────────────────────────────
+
+console.log("\n  ── Encryption & Decryption ──────────────────");
+
+// Set a test master key (64 hex chars = 32 bytes)
+process.env.KQ_MASTER_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+test("KQParser.encrypt() returns ENC: prefixed string", () => {
+  const enc = KQParser.encrypt("mysecret");
+  assert(enc.startsWith("ENC:"), "encrypted value should start with ENC:");
+  assert(enc.split(":").length === 4, "should have 4 parts: ENC, cipher, iv, tag");
+});
+
+test("KQParser.decrypt() recovers original value", () => {
+  const original = "supersecret123";
+  const enc      = KQParser.encrypt(original);
+  const dec      = KQParser.decrypt(enc);
+  assert(dec === original, "decrypted value should match original");
+});
+
+test("each encrypt() call produces different ciphertext (random IV)", () => {
+  const enc1 = KQParser.encrypt("same");
+  const enc2 = KQParser.encrypt("same");
+  assert(enc1 !== enc2, "same plaintext should produce different ciphertext each time");
+});
+
+test("decrypt() throws on tampered ciphertext", () => {
+  const enc     = KQParser.encrypt("secret");
+  const tampered = enc.replace(/ENC:(.{4})/, "ENC:XXXX");
+  assertThrows(() => KQParser.decrypt(tampered), "KQError");
+});
+
+test("decrypt() throws on wrong master key", () => {
+  const enc = KQParser.encrypt("secret");
+  process.env.KQ_MASTER_KEY = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+  assertThrows(() => KQParser.decrypt(enc), "KQError");
+  process.env.KQ_MASTER_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+});
+
+test("ENC: value in config file is decrypted at load time", () => {
+  const enc    = KQParser.encrypt("decrypted-value");
+  const tmpDir = path.join(__dirname, ".tmp-enc");
+  const kqFile = path.join(tmpDir, "config.kq");
+  fs.mkdirSync(tmpDir, { recursive: true });
+  fs.writeFileSync(kqFile, `::server\n  secret = ${enc}\n::end\n`);
+  const s = new KQParser(kqFile, "server").load();
+  assert(s.get("secret") === "decrypted-value", "ENC: value not decrypted");
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test("throws KQError for ENC: value without KQ_MASTER_KEY", () => {
+  const enc    = KQParser.encrypt("secret");
+  const tmpDir = path.join(__dirname, ".tmp-enc2");
+  const kqFile = path.join(tmpDir, "config.kq");
+  fs.mkdirSync(tmpDir, { recursive: true });
+  fs.writeFileSync(kqFile, `::server\n  secret = ${enc}\n::end\n`);
+  const savedKey = process.env.KQ_MASTER_KEY;
+  delete process.env.KQ_MASTER_KEY;
+  assertThrows(() => new KQParser(kqFile, "server").load(), "KQError");
+  process.env.KQ_MASTER_KEY = savedKey;
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test("KQParser.encrypt() throws without KQ_MASTER_KEY", () => {
+  const saved = process.env.KQ_MASTER_KEY;
+  delete process.env.KQ_MASTER_KEY;
+  assertThrows(() => KQParser.encrypt("secret"), "KQError");
+  process.env.KQ_MASTER_KEY = saved;
+});
+
+// ─────────────────────────────────────────────
+// Secret masking tests
+// ─────────────────────────────────────────────
+
+console.log("\n  ── Secret Masking ───────────────────────────");
+
+test(".all(true) masks secret keys", () => {
+  const tmpDir = path.join(__dirname, ".tmp-mask");
+  const kqFile = path.join(tmpDir, "config.kq");
+  fs.mkdirSync(tmpDir, { recursive: true });
+  fs.writeFileSync(kqFile, `::server\n  port = 3000\n  db_pass = $ENV:KQ_TEST_DB_PASS\n  secret_key = $ENV:KQ_TEST_SECRET\n::end\n`);
+  const s = new KQParser(kqFile, "server").load();
+  const masked = s.all(true);
+  assert(masked.db_pass    === "***MASKED***", "db_pass should be masked");
+  assert(masked.secret_key === "***MASKED***", "secret_key should be masked");
+  assert(masked.port       === 3000,           "port should not be masked");
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test(".all() without mask shows real values", () => {
+  const tmpDir = path.join(__dirname, ".tmp-mask2");
+  const kqFile = path.join(tmpDir, "config.kq");
+  fs.mkdirSync(tmpDir, { recursive: true });
+  fs.writeFileSync(kqFile, `::server\n  port = 3000\n  db_pass = $ENV:KQ_TEST_DB_PASS\n::end\n`);
+  const s = new KQParser(kqFile, "server").load();
+  const all = s.all();
+  assert(all.db_pass !== "***MASKED***", "unmasked all() should show real value");
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test("options.mask = true masks by default in .all()", () => {
+  const tmpDir = path.join(__dirname, ".tmp-mask3");
+  const kqFile = path.join(tmpDir, "config.kq");
+  fs.mkdirSync(tmpDir, { recursive: true });
+  fs.writeFileSync(kqFile, `::server\n  token = $ENV:KQ_TEST_SECRET\n  port = 3000\n::end\n`);
+  const s = new KQParser(kqFile, "server", null, { mask: true }).load();
+  const all = s.all();
+  assert(all.token === "***MASKED***", "token should be masked with options.mask=true");
+  assert(all.port  === 3000,           "port should not be masked");
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+delete process.env.KQ_MASTER_KEY;

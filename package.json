@@ -1,7 +1,7 @@
 {
   "name": "kq-config",
-  "version": "1.0.2",
-  "description": "Professional .kq config parser with server/client block separation, built-in .env support, layered overrides, and schema validation. Zero dependencies.",
+  "version": "1.0.3",
+  "description": "Professional .kq config parser — server/client block separation, built-in .env support, layered overrides, schema validation. Zero dependencies.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -16,29 +16,33 @@
     "dist",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "SECURITY.md"
   ],
   "scripts": {
-    "build": "node scripts/build.js",
-    "test": "node test/index.test.js",
+    "build":          "node scripts/build.js",
+    "test":           "node test/index.test.js",
     "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
     "config",
     "kq",
+    "konfig-query",
     "configuration",
     "env",
+    "dotenv",
     "parser",
     "server",
     "client",
-    "dotenv",
-    "settings"
+    "settings",
+    "environment",
+    "secure"
   ],
-  "author": "Kanishq.R.Purohit <kanishq.r.purohit@gmail.com>",
+  "author": "kanishq.R.Purohit",
   "license": "MIT",
   "repository": {
-  "type": "git",
-  "url": "git+https://github.com/kanishq-9/kq-config.git"
+    "type": "git",
+    "url": "git+https://github.com/kanishq-9/kq-config.git"
   },
   "bugs": {
     "url": "https://github.com/kanishq-9/kq-config/issues"
@@ -46,5 +50,9 @@
   "homepage": "https://github.com/kanishq-9/kq-config#readme",
   "engines": {
     "node": ">=14.0.0"
+  },
+  "publishConfig": {
+    "provenance": true,
+    "access": "public"
   }
 }
