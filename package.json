@@ -1,6 +1,6 @@
 {
   "name": "kq-config",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Professional .kq config parser — server/client block separation, built-in .env support, layered overrides, schema validation. Zero dependencies.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
